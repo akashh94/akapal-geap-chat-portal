@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# akapal-geap-chat-portal
 
-## Getting Started
+Standalone Next.js full-stack portal: a logged-in user gets a chat window. Login
+is local (a seeded demo user) with a stateless JWT session in an httpOnly cookie.
 
-First, run the development server:
+This is the front end / auth layer. `src/app/api/chat/route.ts` is the **BFF
+seam** — the file that will later call the BFF + Google ADK agent.
+
+## Stack
+
+- Next.js 16 App Router, TypeScript, Tailwind v4
+- SQLite via Node's built-in `node:sqlite` (no external server)
+- `bcryptjs` for password hashing, `jose` for the session JWT, `zod` for validation
+
+## Run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install --include=dev   # NODE_ENV=production is set in some shells; --include=dev keeps devDeps
+npm run seed                # create the demo user
+set NODE_ENV=development && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 and sign in with **demo@example.com / demo1234**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example` to `.env`:
 
-## Learn More
+| Var | Required | Notes |
+|---|---|---|
+| `SESSION_SECRET` | yes | HS256 signing key for the session cookie |
+| `DATABASE_PATH` | no | defaults to `./data/app.db` |
+| `COOKIE_SECURE` | no | `true` only behind HTTPS; keep `false` locally |
 
-To learn more about Next.js, take a look at the following resources:
+## The `/api/chat` seam
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`POST /api/chat` with `{ "message": "..." }`. It requires a valid session cookie
+(returns `401` otherwise) and currently returns a stubbed reply. Step 2 replaces
+the stub with a call to the BFF, which owns the `user_id -> ADK session_id`
+mapping and authorization. See `ADK_SESSION_AND_BFF.md` and `docs/AUTH.md`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` — dev server
+- `npm run build` / `npm start` — production build / serve
+- `npm run lint` — ESLint
+- `npm run seed` — seed the demo user
