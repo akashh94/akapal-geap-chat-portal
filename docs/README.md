@@ -27,6 +27,8 @@ Background material that already exists and is **not** replaced by these docs:
   are not login sessions, and the general BFF pattern. This is the design basis
   for everything below.
 - [`./AUTH.md`](./AUTH.md) — the portal's login/auth flow in detail.
+- [`./CONFIGURATION.md`](./CONFIGURATION.md) — how to set the environment
+  variables in both projects, and the two values that must agree.
 
 Each diagram in these docs is followed by a **Reading this diagram** note that
 explains the shapes, arrows and labels, so the diagram stands on its own.
