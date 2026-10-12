@@ -13,13 +13,6 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
 # misc
 .DS_Store
 *.pem
@@ -39,10 +32,3 @@ yarn-error.log*
 
 # local Command Code tool state
 /.commandcode/
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts

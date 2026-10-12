@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat · akapal-geap chat portal</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="chat">
+      <header class="chat__header">
+        <div>
+          <h1 class="chat__title">Chat</h1>
+          <p class="muted">Signed in as <span id="who">…</span></p>
+        </div>
+        <a class="btn btn--ghost" href="/logout">Sign out</a>
+      </header>
+
+      <p class="thread muted" id="thread" hidden></p>
+
+      <div class="messages" id="messages"></div>
+
+      <form class="composer" id="composer">
+        <input
+          id="input"
+          class="composer__input"
+          type="text"
+          placeholder="Type a message…"
+          autocomplete="off"
+        />
+        <button type="submit" id="send" class="btn">Send</button>
+      </form>
+    </main>
+
+    <script src="/js/chat.js" defer></script>
+  </body>
+</html>

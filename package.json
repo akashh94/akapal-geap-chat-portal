@@ -2,29 +2,22 @@
   "name": "akapal-geap-chat-portal",
   "version": "0.1.0",
   "private": true,
+  "description": "Chat portal: local login + a chat window that streams from the BFF/agent.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
+    "start": "node server.js",
+    "dev": "node --watch server.js",
     "seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "compression": "^1.8.1",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
     "jose": "^6.2.12",
-    "next": "16.4.0",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
     "zod": "^4.6.5"
-  },
-  "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
-    "@types/node": "^24.19.1",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.4.0",
-    "tailwindcss": "^4",
-    "typescript": "^5"
   }
 }
