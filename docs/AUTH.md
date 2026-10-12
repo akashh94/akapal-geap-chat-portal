@@ -6,7 +6,7 @@ stateless JWT session in an httpOnly cookie. No external identity provider.
 ```mermaid
 sequenceDiagram
   participant U as Browser
-  participant A as Server Action (login)
+  participant A as POST /login (server.js)
   participant DB as SQLite (users)
   U->>A: submit email + password
   A->>A: validate with zod (LoginFormSchema)
@@ -20,18 +20,18 @@ sequenceDiagram
 
 ## Two layers of protection
 
-1. **Optimistic — `src/proxy.ts`.** Runs before routes on `/chat*` and `/login`.
-   Verifies the cookie with jose and redirects: unauthenticated `/chat*` → `/login`,
-   authenticated `/login` → `/chat`. Cookie only, no DB access.
-2. **Secure — `src/lib/dal.ts`.** The real check. Pages call `getCurrentUser()`;
-   the route handler calls `getSessionUserId()` and returns `401` instead of
-   redirecting.
+1. **Guard — `requireAuth` / `redirectIfAuthed` in `server.js`.** Run on
+   `GET /chat` and `GET /login`. Verify the cookie with jose and redirect:
+   unauthenticated `/chat` → `/login`, authenticated `/login` → `/chat`. Cookie
+   only, no DB access.
+2. **API check — `requireAuthJson` in `server.js`.** The `/api/*` routes assert
+   the same session and return `401` instead of redirecting.
 
 ```mermaid
 flowchart TD
-  R["Request"] --> P{"proxy: valid session cookie?"}
+  R["Request"] --> P{"requireAuth: valid session cookie?"}
   P -- "no" --> L["/login"]
-  P -- "yes" --> D["page: getCurrentUser() -> DB check"]
+  P -- "yes" --> D["serve /chat + load the user row"]
   D -- "ok" --> C["/chat renders"]
   D -- "missing user" --> L
 ```
@@ -43,9 +43,9 @@ value that becomes the ADK `user_id` in step 2 (see `ADK_SESSION_AND_BFF.md`).
 
 | Concern | Where |
 |---|---|
-| Password hashing | `src/lib/password.ts` (bcryptjs, 10 rounds) |
-| User store | `src/lib/db.ts` (node:sqlite) |
-| Session cookie | `src/lib/session.ts` (jose, 7-day TTL) |
-| Auth checks | `src/lib/dal.ts` |
-| Login / logout actions | `src/app/actions/auth.ts` |
-| Optimistic redirects | `src/proxy.ts` |
+| Password hashing | `server.js` (bcryptjs, 10 rounds) |
+| User store | `server.js` (node:sqlite) |
+| Session cookie | `server.js` (jose, 7-day TTL) |
+| Auth checks | `server.js` (`verifySession`, `requireAuth`, `requireAuthJson`) |
+| Login / logout | `server.js` (`POST /login` / `GET /logout`) |
+| Guards | `server.js` (`redirectIfAuthed`) |

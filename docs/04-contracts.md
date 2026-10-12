@@ -82,7 +82,7 @@ reply into these same frames — so the browser only ever sees one protocol.
 
 ```mermaid
 flowchart LR
-  B["Browser"] -- "http :3000" --> N["Portal<br/>Next.js"]
+  B["Browser"] -- "http :3000" --> N["Portal<br/>Express"]
   N -- "fetch BFF_URL<br/>http://localhost:4000" --> E["Python BFF<br/>FastAPI :4000"]
   E -- "HTTPS + ADC token" --> G["Agent Engine<br/>us-central1"]
 ```

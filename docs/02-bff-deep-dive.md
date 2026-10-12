@@ -17,7 +17,7 @@ of responsibility is:
 
 | Concern | Owner | Where |
 |---|---|---|
-| Login, issuing the JWT cookie | Portal | `chat-portal/src/lib/session.ts` |
+| Login, issuing the JWT cookie | Portal | `chat-portal/server.js` |
 | Verifying that JWT and recovering `user_id` | **BFF** | `app/auth.py` |
 | Mapping `user_id -> session_id`, persisted | **BFF** | `app/store.py` |
 | Authorization: does this user own this thread? | **BFF** | `app/store.py` + `app/main.py` |
@@ -111,7 +111,7 @@ def verify_portal_token(token: str | None) -> str | None:
 Three things to notice:
 
 1. **Shared secret, symmetric algorithm.** The portal signs with `SESSION_SECRET`
-   via `jose` HS256 (`src/lib/session.ts`); the BFF verifies with the *same*
+   via `jose` HS256 (`server.js`); the BFF verifies with the *same*
    secret via PyJWT. This one shared value is the entire trust relationship.
 2. **It only trusts a `userId` of type `str`.** Anything else (missing, wrong
    type, expired, bad signature) collapses to `None` — and therefore to a 401.

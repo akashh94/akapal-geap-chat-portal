@@ -1,26 +1,32 @@
 # akapal-geap-chat-portal
 
-Standalone Next.js full-stack portal: a logged-in user gets a chat window. Login
-is local (a seeded demo user) with a stateless JWT session in an httpOnly cookie.
+Standalone Express-served portal (no framework, no build step): a logged-in user
+gets a chat window. Login is local (a seeded demo user) with a stateless JWT
+session in an httpOnly cookie.
 
-This is the front end / auth layer. `src/app/api/chat/route.ts` is the **BFF
-seam** — the file that will later call the BFF + Google ADK agent.
+This is the front end / auth layer. `server.js`'s `POST /api/chat` is the **BFF
+seam** — the route that calls the BFF + Google ADK agent.
 
 ## Stack
 
-- Next.js 16 App Router, TypeScript, Tailwind v4
+- Node ≥22.5, Express 4 in a single `server.js` (no bundler, no build step)
+- Vanilla-JS front end under `public/` (HTML + CSS + plain `<script>`)
 - SQLite via Node's built-in `node:sqlite` (no external server)
 - `bcryptjs` for password hashing, `jose` for the session JWT, `zod` for validation
 
 ## Run
 
 ```bash
-npm install --include=dev   # NODE_ENV=production is set in some shells; --include=dev keeps devDeps
+npm install
 npm run seed                # create the demo user
-set NODE_ENV=development && npm run dev
+npm run dev                 # node --watch server.js
 ```
 
 Open http://localhost:3000 and sign in with **demo@example.com / demo1234**.
+
+`npm start` runs the same server without watch. Chat needs the BFF up at
+`BFF_URL` (default `http://localhost:4000`); without it `/api/chat` returns
+`502 {"error":"BFF unreachable"}`.
 
 ## Environment
 
@@ -28,20 +34,21 @@ Copy `.env.example` to `.env`:
 
 | Var | Required | Notes |
 |---|---|---|
-| `SESSION_SECRET` | yes | HS256 signing key for the session cookie |
+| `SESSION_SECRET` | yes | HS256 signing key for the session cookie (shared with the BFF) |
 | `DATABASE_PATH` | no | defaults to `./data/app.db` |
 | `COOKIE_SECURE` | no | `true` only behind HTTPS; keep `false` locally |
+| `BFF_URL` | no | base URL of the BFF, default `http://localhost:4000` |
+| `PORT` | no | listen port, default `3000` |
 
 ## The `/api/chat` seam
 
 `POST /api/chat` with `{ "message": "..." }`. It requires a valid session cookie
-(returns `401` otherwise) and currently returns a stubbed reply. Step 2 replaces
-the stub with a call to the BFF, which owns the `user_id -> ADK session_id`
-mapping and authorization. See `ADK_SESSION_AND_BFF.md` and `docs/AUTH.md`.
+(returns `401` otherwise) and forwards the turn to the BFF as
+`Authorization: Bearer <session JWT>`, relaying the reply as a
+`text/event-stream`. See `ADK_SESSION_AND_BFF.md` and `docs/AUTH.md`.
 
 ## Scripts
 
-- `npm run dev` — dev server
-- `npm run build` / `npm start` — production build / serve
-- `npm run lint` — ESLint
+- `npm run dev` — dev server (`node --watch server.js`)
+- `npm start` — run the server
 - `npm run seed` — seed the demo user

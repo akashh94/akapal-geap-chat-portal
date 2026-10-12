@@ -16,7 +16,7 @@ cookie it sets is the token the BFF later verifies.
 sequenceDiagram
   autonumber
   participant U as Browser
-  participant A as login Server Action
+  participant A as POST /login (server.js)
   participant DB as SQLite users
   participant CK as Session cookie
 
@@ -55,7 +55,7 @@ sequenceDiagram
   participant A as Agent Engine
 
   U->>P: POST /api/chat { message }  (+ session cookie)
-  P->>P: getSessionUserId() -> userId (401 if none)
+  P->>P: requireAuthJson -> userId (401 if none)
   P->>B: POST /api/chat Authorization: Bearer jwt
   B->>B: verify_portal_token -> userId
   B->>DB: get_active_thread(userId) -> none
@@ -202,7 +202,7 @@ sequenceDiagram
   participant B as BFF (down)
 
   U->>P: POST /api/chat { message }
-  P->>P: getSessionUserId() -> userId (ok)
+  P->>P: requireAuthJson -> userId (ok)
   P->>B: fetch BFF_URL/api/chat
   B--xP: connection refused
   P-->>U: 502 { "error": "BFF unreachable" }

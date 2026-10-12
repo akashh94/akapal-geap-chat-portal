@@ -1,6 +1,6 @@
 # Architecture — akapal-geap chat system
 
-This document describes the full system end to end: the **chat portal** (Next.js),
+This document describes the full system end to end: the **chat portal** (Express),
 the **BFF** (Express/TypeScript), and the **agent** (Google ADK on Agent Runtime /
 Agent Engine), plus the two SQLite stores and the contracts between them.
 
@@ -23,8 +23,9 @@ shapes, arrows and labels, so the diagram stands on its own.
 
 Three tiers, each with a clear owner, connected by two well-defined seams:
 
-- **Chat portal** — the browser-facing Next.js app. It owns *login* and *who the
-  user is*. It renders the chat UI and exposes a single server route,
+- **Chat portal** — the browser-facing Express app (a single `server.js`; no
+  framework on the front end and no build step). It owns *login* and *who the
+  user is*. It serves the chat UI and exposes a single server route,
   `/api/chat`, that acts as the seam to the BFF.
 - **BFF** (backend-for-frontend) — an Express service that owns the *mapping
   between a logged-in user and an agent conversation*, and the authorization
@@ -51,12 +52,12 @@ existence; everything else in the BFF exists to support it.
 
 ```mermaid
 flowchart LR
-  U["User's browser<br/>(React chat UI)"]
+  U["User's browser<br/>(vanilla chat UI)"]
 
-  subgraph Portal["Chat portal — Next.js :3000"]
-    P_UI["Pages + Server Actions<br/>login / chat"]
-    P_PROXY["proxy.ts<br/>optimistic route guard"]
-    P_DAL["DAL<br/>session + user lookup"]
+  subgraph Portal["Chat portal — Express :3000"]
+    P_UI["server.js<br/>login / logout / pages"]
+    P_PROXY["route guards<br/>cookie-only"]
+    P_DAL["session + user lookup"]
     P_API["/api/chat<br/>(the BFF seam)"]
     P_DB[("SQLite<br/>users")]
   end
@@ -104,7 +105,7 @@ but never the portal or the BFF's database.
 ```mermaid
 flowchart LR
   B["Browser"]
-  N["Next.js dev/prod :3000<br/>Node runtime"]
+  N["Express :3000<br/>Node >=22.5"]
   E["Express BFF :4000<br/>Node >=22.5"]
   G["Agent Engine REST<br/>us-central1"]
   N -- "fetch BFF_URL /api/chat" --> E
@@ -125,10 +126,10 @@ the single source of identity.
 
 | Component | Tech | Owns | Key files | State |
 |---|---|---|---|---|
-| Chat portal | Next.js 16 (App Router), React 19, Tailwind v4, TypeScript | Login, session cookie, UI, BFF seam | `src/app/**`, `src/lib/**`, `src/proxy.ts` | `data/app.db` (`users`) |
+| Chat portal | Express 4 (single `server.js`), vanilla JS, no build step, Node ≥22.5 | Login, session cookie, UI, BFF seam | `server.js`, `public/**` | `data/app.db` (`users`) |
 | BFF | Express 4, TypeScript (ESM), Node ≥22.5 | User↔session mapping, authorization, agent calls | `src/auth.ts`, `src/store.ts`, `src/routes/chat.ts`, `src/agent/*` | `data/bff.db` (`chat_threads`) |
 | Agent | Google ADK 2.6.2 (`AdkApp`) on Agent Runtime | Conversation history, memory, state, model calls | deployed from `akapal-geap-agent` (`deploy_adk.py`, `app/agent.py`) | Agent Engine sessions |
-| Identity | JWT (HS256 via `jose`), httpOnly cookie | — | `src/lib/session.ts` (portal), `src/auth.ts` (BFF) | — |
+| Identity | JWT (HS256 via `jose`), httpOnly cookie | — | `server.js` (portal), `src/auth.ts` (BFF) | — |
 | Model / tools | Gemini 2.5 Flash, MCP portfolio server, A2A financial planner | — | agent deployment env | — |
 
 ---
@@ -138,46 +139,50 @@ the single source of identity.
 Each subsection below follows the same shape: **what it is → what it does, step
 by step → the diagram → how to read the diagram**.
 
-### 3.1 Chat portal (Next.js)
+### 3.1 Chat portal (Express)
 
-**What it is.** A Next.js App Router application that serves the login page, the
-chat page, and one API route. It holds the user's credentials and their session.
+**What it is.** A single `server.js` — an Express 4 app with no front-end
+framework and no build step. It serves the login page, the chat page, and one API
+route, and holds the user's credentials and their session. The database, JWT,
+password hashing and zod all live in this one file; the UI is static HTML/CSS/JS
+under `public/`.
 
 **What it does, step by step.**
 
-1. **Login.** The login page renders a client form that submits to a Server
-   Action (`src/app/actions/auth.ts → login`). The action validates input with a
-   zod schema (`LoginFormSchema`), looks the user up by email (`src/lib/db.ts`),
+1. **Login.** `public/login.html` + `public/js/login.js` POST JSON to `POST /login`
+   on the server. `server.js` validates input with a zod schema
+   (`LoginFormSchema`), looks the user up by email (node:sqlite `users` table),
    verifies the password (`bcryptjs`, 10 rounds), and — on success — calls
-   `createSession(user.id)`.
-2. **Session.** `createSession` signs a JWT with payload `{ userId, expiresAt }`
-   using HS256 and `SESSION_SECRET`, and stores it as an **httpOnly, `sameSite=lax`
-   cookie** named `session`, with a 7-day TTL. The `Secure` flag is driven by a
-   dedicated `COOKIE_SECURE` env var (not `NODE_ENV`) so it works over plain
-   http on localhost.
-3. **Optimistic guard.** `src/proxy.ts` runs before routes on `/chat*` and
-   `/login`. It verifies the cookie and redirects: unauthenticated `/chat*` →
-   `/login`, authenticated `/login` → `/chat`. This is a *fast, cookie-only*
-   check — no database access.
-4. **Secure check.** The real authorization lives in the Data Access Layer
-   (`src/lib/dal.ts`): `getCurrentUser()` reads the session, loads the user, and
-   redirects to `/login` if anything is missing. `getSessionUserId()` is the
-   non-redirecting variant used by the API route. Pages and route handlers always
-   go through the DAL rather than trusting the proxy alone.
-5. **Chat UI.** The chat page (server component) calls `getCurrentUser()` and
-   renders a client `ChatWindow`, passing the user's name. The client keeps the
-   message list, POSTs to `/api/chat`, and shows the current agent thread id.
-6. **The seam.** `src/app/api/chat/route.ts` is the critical boundary. It:
+   `createSession(res, user.id)`.
+2. **Session.** `signSession` signs a JWT with payload `{ userId, expiresAt }`
+   using HS256 and `SESSION_SECRET`; `createSession` stores it via `res.cookie` as
+   an **httpOnly, `sameSite=lax` cookie** named `session`, with a 7-day TTL. The
+   `Secure` flag is driven by a dedicated `COOKIE_SECURE` env var (not
+   `NODE_ENV`) so it works over plain http on localhost.
+3. **Route guards.** `requireAuth` / `redirectIfAuthed` in `server.js` run on
+   `GET /chat` and `GET /login`. They verify the cookie and redirect:
+   unauthenticated `/chat` → `/login`, authenticated `/login` → `/chat`. This is
+   a *fast, cookie-only* check — no database access.
+4. **Secure check.** The chat page is only served after `requireAuth` has verified
+   the session, and the API routes assert it again. The API uses
+   `requireAuthJson`, which returns `401` instead of redirecting. There is no
+   separate DAL module — the identity check is `verifySession(req)` →
+   `payload.userId`.
+5. **Chat UI.** `public/chat.html` + `public/js/chat.js` render the message list
+   and stream a reply. On load, `chat.js` fetches `/api/me` to fill in the user's
+   name, keeps the message list locally, POSTs to `/api/chat`, and shows the
+   current agent thread id.
+6. **The seam.** `POST /api/chat` in `server.js` is the critical boundary. It:
    confirms the user (401 otherwise), reads the raw session JWT, and forwards
    `{ message, sessionId }` to `${BFF_URL}/api/chat` with
-   `Authorization: Bearer <jwt>`. It returns the BFF's JSON verbatim (or
-   `502 BFF unreachable` if the BFF is down).
+   `Authorization: Bearer <jwt>`. It relays the BFF's `text/event-stream` straight
+   through (or `502 BFF unreachable` if the BFF is down).
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant U as Browser
-  participant SA as Server Action (login)
+  participant SA as POST /login (server.js)
   participant DB as SQLite (users)
   participant CK as Session cookie
 
@@ -187,7 +192,7 @@ sequenceDiagram
   DB-->>SA: user row (or none)
   SA->>SA: bcrypt verifyPassword
   alt valid credentials
-    SA->>CK: createSession(user.id) — sign HS256 JWT
+    SA->>CK: createSession(res, user.id) — sign HS256 JWT
     SA-->>U: redirect /chat (Set-Cookie: session)
   else invalid
     SA-->>U: { message: "Invalid email or password." }
@@ -383,7 +388,7 @@ sequenceDiagram
   participant A as Agent Engine
 
   U->>P: POST /api/chat { message }  (+ session cookie)
-  P->>P: getSessionUserId() — cookie valid?
+  P->>P: requireAuth — session cookie valid?
   P->>B: POST /api/chat { message }  (Authorization: Bearer <jwt>)
   B->>B: verifyPortalToken -> userId
   B->>DB: getActiveThread(userId) -> none
@@ -455,6 +460,7 @@ path ran.
 | `DATABASE_PATH` | SQLite path, default `./data/app.db` |
 | `COOKIE_SECURE` | `true` only behind HTTPS |
 | `BFF_URL` | Base URL of the BFF, default `http://localhost:4000` |
+| `PORT` | listen port, default `3000` |
 
 **BFF** (`.env`)
 
@@ -510,9 +516,9 @@ Design decisions worth naming:
 ```bash
 # Portal
 cd akapal-geap-chat-portal
-npm install --include=dev       # NODE_ENV=production omits devDeps otherwise
+npm install
 npm run seed                    # demo@example.com / demo1234
-set NODE_ENV=development && npm run dev     # :3000
+npm run dev                     # node --watch server.js  →  :3000
 
 # BFF
 cd ../akapal-geap-bff
@@ -525,5 +531,5 @@ The BFF needs Google Application Default Credentials
 project. If it can't, `/api/chat` returns `502` with the upstream error, and the
 portal shows it.
 
-Scripts: portal has `dev`, `build`, `start`, `lint`, `seed`; the BFF has `build`,
+Scripts: portal has `dev`, `start`, `seed`; the BFF has `build`,
 `start`, `dev`, `typecheck`, `test`.

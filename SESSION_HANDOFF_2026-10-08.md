@@ -4,6 +4,12 @@
 **Supersedes:** `SESSION_HANDOFF.md` (deleted; that one described the auth-core-only
 state before any UI, BFF, or agent wiring existed).
 
+> **Note (later):** the portal described here was ported off Next.js to an Express
+> server (`server.js`) with a vanilla `public/` front end; see `README.md` and
+> `ARCHITECTURE.md`. The portal paths and commands below (`src/**`, `proxy.ts`,
+> `npm run build`/`lint`, `NODE_ENV=development`) no longer apply. The contracts —
+> the `session` JWT cookie, the `/api/chat` seam, and the env vars — are unchanged.
+
 **Status:** The portal is complete and verified, and **two** interchangeable BFF
 implementations (TypeScript and Python) are built and verified end to end against
 the **real** deployed agent. Nothing is committed anywhere yet.

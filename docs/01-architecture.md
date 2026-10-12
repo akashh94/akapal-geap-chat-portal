@@ -51,7 +51,7 @@ resume the same conversation. That is the whole point of the BFF.
 
 | Tier | Repo | Tech | Owns | State |
 |---|---|---|---|---|
-| Portal | `akapal-geap-chat-portal` | Next.js 16 (App Router), React 19, Tailwind v4, TypeScript | Login, session cookie, chat UI, the `/api/chat` seam | `data/app.db` (`users`) |
+| Portal | `akapal-geap-chat-portal` | Express 4 (single `server.js`), vanilla JS, no build step, Node ≥22.5 | Login, session cookie, chat UI, the `/api/chat` seam | `data/app.db` (`users`) |
 | BFF | `akapal-geap-bff-python` | FastAPI, Agent Engine SDK (`agentplatform`) | `user_id -> session_id` mapping, ownership authorization, agent calls | `data/bff.db` (`chat_threads`) |
 | Agent | deployed from `akapal-geap-agent` | Google ADK 2.6.2 (`AdkApp`) on Agent Runtime | Conversation history, memory, state, model calls | Agent Engine sessions |
 
@@ -63,7 +63,8 @@ the agent never learns about logins.
 
 ## Portal overview (concise)
 
-The portal is a Next.js app that owns identity and the chat UI. It is described
+The portal is an Express app (a single `server.js`; vanilla front end, no build
+step) that owns identity and the chat UI. It is described
 in full in [`AUTH.md`](./AUTH.md) and [`../ARCHITECTURE.md`](../ARCHITECTURE.md);
 here is only what the BFF needs to know about it.
 
@@ -76,7 +77,7 @@ the cookie's JWT in an `Authorization: Bearer` header.
 sequenceDiagram
   autonumber
   participant U as Browser
-  participant A as login Server Action
+  participant A as POST /login (server.js)
   participant DB as SQLite users
   participant P as Portal /api/chat
   participant B as Python BFF
@@ -87,7 +88,7 @@ sequenceDiagram
   A->>A: verifyPassword (bcrypt), then sign an HS256 JWT (jose)
   A-->>U: Set-Cookie session + redirect /chat
   U->>P: POST /api/chat { message } (cookie sent automatically)
-  P->>P: getSessionUserId() -> userId
+  P->>P: verifySession() -> userId
   P->>B: POST /api/chat Authorization: Bearer jwt
   B-->>P: text/event-stream frames
   P-->>U: relays the frames as they arrive
@@ -105,14 +106,12 @@ reply — it relays the event-stream frames as-is. That is what makes the portal
 
 | Concern | File |
 |---|---|
-| Password hashing (bcryptjs, 10 rounds) | `src/lib/password.ts` |
-| User store (Node `node:sqlite`) | `src/lib/db.ts` |
-| Session cookie (jose, HS256, 7-day TTL) | `src/lib/session.ts` |
-| Authoritative auth checks (`getSessionUserId`, `getCurrentUser`) | `src/lib/dal.ts` |
-| Optimistic cookie-only route guard | `src/proxy.ts` |
-| Login / logout Server Actions | `src/app/actions/auth.ts` |
-| The BFF seam (`POST /api/chat`) | `src/app/api/chat/route.ts` |
-| Chat UI (client component) | `src/app/chat/chat-window.tsx` |
+| Server: routes, auth, guards, the BFF seam | `server.js` |
+| Session cookie (jose, HS256, 7-day TTL) + auth checks | `server.js` |
+| User store (Node `node:sqlite`) + password hashing (bcryptjs) | `server.js` |
+| Login page / form | `public/login.html`, `public/js/login.js` |
+| Chat UI + SSE consumer | `public/chat.html`, `public/js/chat.js` |
+| Styling | `public/css/styles.css` |
 
 Two details matter to the BFF:
 
@@ -120,7 +119,7 @@ Two details matter to the BFF:
   the value the portal forwards as the JWT's `userId` claim, and the value the
   BFF reads back out. See [`../ADK_SESSION_AND_BFF.md`](../ADK_SESSION_AND_BFF.md)
   §5.5 on why it should be an internal id and never PII like an email.
-- **The portal signs the cookie with `SESSION_SECRET`** (`src/lib/session.ts`).
+- **The portal signs the cookie with `SESSION_SECRET`** (`server.js`).
   The BFF shares that exact secret, which is the entire trust relationship
   between the two.
 
